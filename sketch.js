@@ -1,112 +1,224 @@
-var towerImg, tower;
-var doorImg, door, doorsGroup;
-var climberImg, climber, climbersGroup;
-var ghost, ghostImg;
-var invisibleBlockGroup, invisibleBlock;
-var gameState = "play"
+const Engine = Matter.Engine;
+const World = Matter.World;
+const Bodies = Matter.Bodies;
+const Constraint = Matter.Constraint;
+var engine, world, backgroundImg;
+var canvas, angle, tower, ground, cannon, boat;
+var balls = [];
+var boats = [];
+var score = 0;
+var boatAnimation = [];
+var boatSpritedata, boatSpritesheet;
 
-function preload(){
-  towerImg = loadImage("tower.png");
-  doorImg = loadImage("door.png");
-  climberImg = loadImage("climber.png");
-  ghostImg = loadImage("ghost-standing.png");
-  spookySound = loadSound("spooky.wav");
+var brokenBoatAnimation = [];
+var brokenBoatSpritedata, brokenBoatSpritesheet;
+
+var waterSplashAnimation = [];
+var waterSplashSpritedata, waterSplashSpritesheet;
+var cannonwatersound;
+var isGameOver = false;
+var islaughing=false;
+function preload() {
+  backgroundImg = loadImage("./assets/background.gif");
+  towerImage = loadImage("./assets/tower.png");
+  boatSpritedata = loadJSON("assets/boat/boat.json");
+  boatSpritesheet = loadImage("assets/boat/boat.png");
+  brokenBoatSpritedata = loadJSON("assets/boat/broken_boat.json");
+  brokenBoatSpritesheet = loadImage("assets/boat/broken_boat.png");
+  waterSplashSpritedata = loadJSON("assets/water_splash/water_splash.json");
+  waterSplashSpritesheet = loadImage("assets/water_splash/water_splash.png");
+  piratelaughsound = loadSound("assets/pirate_laugh.mp3");
+  cannonwatersound = loadSound("assets/cannon_water.mp3");
+  cannonexplosionsound = loadSound("assets/cannon_explosion.mp3");
+  backgroundmusic = loadSound("assets/background_music.mp3");
 }
 
-function setup(){
-  createCanvas(600,600);
-  spookySound.loop();
-  tower = createSprite(300,300);
-  tower.addImage("tower",towerImg);
-  tower.velocityY = 1;
-  
-  doorsGroup = new Group();
-  climbersGroup = new Group();
-  invisibleBlockGroup = new Group();
-  
-  ghost = createSprite(200,200,50,50);
-  ghost.scale = 0.3;
-  ghost.addImage("ghost", ghostImg);
-}
+function setup() {
+  canvas = createCanvas(1200,600);
+  engine = Engine.create();
+  world = engine.world;
+  angleMode(DEGREES)
+  angle = 15
 
-function draw(){
-  background(0);
-  if (gameState === "play") {
-    if(keyDown("left_arrow")){
-      ghost.x = ghost.x - 3;
-    }
-    
-    if(keyDown("right_arrow")){
-      ghost.x = ghost.x + 3;
-    }
-    
-    if(keyDown("space")){
-      ghost.velocityY = -10;
-    }
-    
-    ghost.velocityY = ghost.velocityY + 0.8
-    
-    if(tower.y > 400){
-      tower.y = 300
-    }
-    spawnDoors();
 
-    
-    //climbersGroup.collide(ghost);
-    if(climbersGroup.isTouching(ghost)){
-      ghost.velocityY = 0;
-    }
-    if(invisibleBlockGroup.isTouching(ghost) || ghost.y > 600){
-      ghost.destroy();
-      gameState = "end"
-    }
-    
-    drawSprites();
-  }
-  
-  if (gameState === "end"){
-    stroke("yellow");
-    fill("yellow");
-    textSize(30);
-    text("Game Over", 230,250)
+  ground = Bodies.rectangle(0, height - 1, width * 2, 1, { isStatic: true });
+  World.add(world, ground);
+
+  tower = Bodies.rectangle(160, 350, 160, 310, { isStatic: true });
+  World.add(world, tower);
+
+  cannon = new Cannon(180, 110, 100, 50, angle);
+
+  var boatFrames = boatSpritedata.frames;
+  for (var i = 0; i < boatFrames.length; i++) {
+    var pos = boatFrames[i].position;
+    var img = boatSpritesheet.get(pos.x, pos.y, pos.w, pos.h);
+    boatAnimation.push(img);
   }
 
-}
+  var brokenBoatFrames = brokenBoatSpritedata.frames;
+  for (var i = 0; i < brokenBoatFrames.length; i++) {
+    var pos = brokenBoatFrames[i].position;
+    var img = brokenBoatSpritesheet.get(pos.x, pos.y, pos.w, pos.h);
+    brokenBoatAnimation.push(img);
+  }
 
-function spawnDoors() {
-  //write code here to spawn the doors in the tower
-  if (frameCount % 240 === 0) {
-    var door = createSprite(200, -50);
-    var climber = createSprite(200,10);
-    var invisibleBlock = createSprite(200,15);
-    invisibleBlock.width = climber.width;
-    invisibleBlock.height = 2;
-    
-    door.x = Math.round(random(120,400));
-    climber.x = door.x;
-    invisibleBlock.x = door.x;
-    
-    door.addImage(doorImg);
-    climber.addImage(climberImg);
-    
-    door.velocityY = 1;
-    climber.velocityY = 1;
-    invisibleBlock.velocityY = 1;
-    
-    ghost.depth = door.depth;
-    ghost.depth +=1;
-   
-    //assign lifetime to the variable
-    door.lifetime = 800;
-    climber.lifetime = 800;
-    invisibleBlock.lifetime = 800;
-
-    
-    //add each door to the group
-    doorsGroup.add(door);
-    invisibleBlock.debug = true;
-    climbersGroup.add(climber);
-    invisibleBlockGroup.add(invisibleBlock);
+  var waterSplashFrames = waterSplashSpritedata.frames;
+  for (var i = 0; i < waterSplashFrames.length; i++) {
+    var pos = waterSplashFrames[i].position;
+    var img = waterSplashSpritesheet.get(pos.x, pos.y, pos.w, pos.h);
+    waterSplashAnimation.push(img);
   }
 }
 
+function draw() {
+  background(189);
+  image(backgroundImg, 0, 0, width, height);
+if(!backgroundmusic.isPlaying()){
+  backgroundmusic.play()
+  backgroundmusic.setVolume(0.1)
+}
+  Engine.update(engine);
+ 
+  push();
+  translate(ground.position.x, ground.position.y);
+  fill("brown");
+  rectMode(CENTER);
+  rect(0, 0, width * 2, 1);
+  pop();
+
+  push();
+  translate(tower.position.x, tower.position.y);
+  rotate(tower.angle);
+  imageMode(CENTER);
+  image(towerImage, 0, 0, 160, 310);
+  pop();
+
+  showBoats();
+
+   for (var i = 0; i < balls.length; i++) {
+    showCannonBalls(balls[i], i);
+    collisionWithBoat(i);
+  }
+
+  cannon.display();
+  
+
+  fill("#6d4c41");
+  textSize(40);
+  text(`Score:${score}`, width - 200, 50);
+  textAlign(CENTER, CENTER);
+}
+
+function collisionWithBoat(index) {
+  for (var i = 0; i < boats.length; i++) {
+    if (balls[index] !== undefined && boats[i] !== undefined) {
+      var collision = Matter.SAT.collides(balls[index].body, boats[i].body);
+
+      if (collision.collided) {
+        score+=5
+          boats[i].remove(i);
+        
+
+        Matter.World.remove(world, balls[index].body);
+        delete balls[index];
+      }
+    }
+  }
+}
+
+function keyPressed() {
+  if (keyCode === DOWN_ARROW) {
+    var cannonBall = new CannonBall(cannon.x, cannon.y);
+    cannonBall.trajectory = [];
+    Matter.Body.setAngle(cannonBall.body, cannon.angle);
+    balls.push(cannonBall);
+  }
+}
+
+function showCannonBalls(ball, index) {
+  if (ball) {
+    ball.display();
+    ball.animate();
+    if (ball.body.position.x >= width || ball.body.position.y >= height - 50) {
+      
+        
+        cannonwatersound.play();
+        ball.remove(index);
+        cannonwatersound.setVolume(0.1);
+      
+        
+      
+    }
+  }
+}
+
+function showBoats() {
+  if (boats.length > 0) {
+    if (
+      boats.length < 4 &&
+      boats[boats.length - 1].body.position.x < width - 300
+    ) {
+      var positions = [-40, -60, -70, -20];
+      var position = random(positions);
+      var boat = new Boat(
+        width,
+        height - 100,
+        170,
+        170,
+        position,
+        boatAnimation
+      );
+
+      boats.push(boat);
+    }
+
+    for (var i = 0; i < boats.length; i++) {
+      Matter.Body.setVelocity(boats[i].body, {
+        x: -0.9,
+        y: 0
+      });
+
+      boats[i].display();
+      boats[i].animate();
+      var collision = Matter.SAT.collides(this.tower, boats[i].body);
+      if (collision.collided && !boats[i].isBroken) {
+        if(!islaughing && !piratelaughsound.isPlaying()){
+          piratelaughsound.play()
+          islaughing=true
+        }
+        isGameOver = true;
+        gameOver();
+      }
+    }
+  } else {
+    var boat = new Boat(width, height - 60, 170, 170, -60, boatAnimation);
+    boats.push(boat);
+  }
+}
+
+function keyReleased() {
+  if (keyCode === DOWN_ARROW && !isGameOver) {
+    balls[balls.length - 1].shoot();
+    cannonexplosionsound.play()
+    cannonexplosionsound.setVolume(0.01)
+  }
+}
+
+function gameOver() {
+  swal(
+    {
+      title: `Game Over!!!`,
+      text: "Thanks for playing!!",
+      imageUrl:
+        "https://raw.githubusercontent.com/whitehatjr/PiratesInvasion/main/assets/boat.png",
+      imageSize: "150x150",
+      confirmButtonText: "Play Again"
+    },
+    function(isConfirm) {
+      if (isConfirm) {
+        location.reload();
+      }
+    }
+  );
+}
